@@ -6,9 +6,9 @@
 ARG OPENVINO_VERSION="2022.2.0"
 ARG TORCHORT_BRANCH="ov_torchort_ga_docker_test"
 
-FROM openvino/ubuntu20_runtime:${OPENVINO_VERSION}
+FROM openvino/ubuntu18_runtime:${OPENVINO_VERSION}
 
-LABEL description="This is the runtime image for OpenVINO™ integration with Torch-ORT on Ubuntu 20.04 LTS"
+LABEL description="This is the runtime image for OpenVINO™ integration with Torch-ORT on Ubuntu 18.04 LTS"
 
 LABEL vendor="Intel Corporation"
 
@@ -21,7 +21,8 @@ SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
 RUN apt-get update; \
     dpkg --get-selections | grep -v deinstall | awk '{print $1}' > base_packages.txt; \
     apt-get install -y --no-install-recommends \
-    git; \
+    git build-essential \
+    python3.8 python3.8-venv libpython3.8-dev; \
     rm -rf /var/lib/apt/lists/*;
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.8 1; \
@@ -32,7 +33,7 @@ WORKDIR /home/ovtort/
 RUN git clone https://github.com/intel-staging/ort.git && \
     cd ort/torch_ort_inference && \
     git checkout ${TORCHORT_BRANCH}
-    
+
 RUN python3 -m pip install --upgrade pip && pip install -U numpy && pip install wheel && pip install -U setuptools
 
 ENV WORKDIR_PATH ort/torch_ort_inference
@@ -42,6 +43,21 @@ RUN python build.py && \
     cd dist/ && \
     pip install *.whl; \
     rm -rf *.whl
+
+WORKDIR /home/ovtort/
+
+RUN pip install --upgrade cmake
+
+RUN git clone --recursive https://github.com/intel/onnxruntime.git && \
+    cd onnxruntime && \
+    ./build.sh --config Release --build_shared_lib --parallel --enable_training --use_openvino CPU_FP32 --build_wheel --skip_tests; \
+    cd build/Linux/Release/dist && \
+    pwd && \
+    pip install *.whl; \
+    cd /home/ovtort/ &&\ 
+    rm -rf onnxruntime
+    
+WORKDIR ${WORKDIR_PATH}
 
 RUN pip install wget pandas torchvision Pillow transformers
 
